@@ -5,38 +5,41 @@ Validation command: `npm test`
 Latest result: **21 passed, 0 failed**. The integration suite runs against an
 ephemeral `mongodb-memory-server` database named `library_test`.
 
-## Authentication and user routes
+## Functional tests
 
-- `POST /api/auth/register validates and safely registers a member`
-- `login, bearer authentication, authorization, and /api/auth/me`
-- `PATCH /api/users/me updates allowed profile fields only`
-- `forgot and reset password use a hashed, expiring, single-use token`
-- `registration validates required fields, email, password, and duplicate accounts`
-- `profile updates ignore privileged fields and password reset works end-to-end`
+| Test | Result |
+|---|---|
+| `POST /api/auth/register validates and safely registers a member` | Pass |
+| `login, bearer authentication, authorization, and /api/auth/me` | Pass |
+| `PATCH /api/users/me updates allowed profile fields only` | Pass |
+| `forgot and reset password use a hashed, expiring, single-use token` | Pass |
+| `profile updates ignore privileged fields and password reset works end-to-end` | Pass |
+| `book catalog search, genre filtering, pagination, and genre list` | Pass |
+| `book details and admin-only create/update with ISBN and copy validation` | Pass |
+| `catalog supports title and author search, genre filters, and combined queries` | Pass |
+| `loan routes enforce borrowing rules, return copies, and scope reads to the member` | Pass |
+| `borrowing, returning, and history update copy counts correctly` | Pass |
+| `member dashboard includes only the member's current and overdue loans` | Pass |
+| `admin dashboard counts match seeded data and role access is restricted` | Pass |
 
-## Book catalog
+## Negative tests
 
-- `Book schema declares a unique ISBN index and validates copy counts`
-- `book catalog search, genre filtering, pagination, and genre list`
-- `book details and admin-only create/update with ISBN and copy validation`
-- `catalog supports title and author search, genre filters, and combined queries`
-- `member cannot create books; duplicate ISBN and negative copies are rejected`
+| Test | Result |
+|---|---|
+| `registration validates required fields, email, password, and duplicate accounts` | Pass |
+| `Book schema declares a unique ISBN index and validates copy counts` | Pass |
+| `member cannot create books; duplicate ISBN and negative copies are rejected` | Pass |
+| `unavailable books and borrowing more than three active books are rejected` | Pass |
+| `admin cannot reduce total copies below the number currently borrowed` | Pass |
 
-## Loans
+## Edge-case and concurrency tests
 
-- `Loan schema indexes and computed display status`
-- `loan routes enforce borrowing rules, return copies, and scope reads to the member`
-- `borrowing, returning, and history update copy counts correctly`
-- `unavailable books and borrowing more than three active books are rejected`
-- `two members competing for the last copy yield one success`
-- `simultaneous duplicate borrows create one active loan`
-- `admin cannot reduce total copies below the number currently borrowed`
-
-## Dashboards
-
-- `member dashboard includes only the member's current and overdue loans`
-- `admin dashboard counts match seeded data and role access is restricted`
-- `overdue loans appear on member and admin dashboards`
+| Test | Result |
+|---|---|
+| `Loan schema indexes and computed display status` | Pass |
+| `two members competing for the last copy yield one success` | Pass |
+| `simultaneous duplicate borrows create one active loan` | Pass |
+| `overdue loans appear on member and admin dashboards` | Pass |
 
 ## Phase 10 — Manual end-to-end edge cases
 
