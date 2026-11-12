@@ -136,3 +136,18 @@ Implement Phase 11 of IMPLEMENTATION_PLAN.md.
 - When finished, run the tests, then summarise: files created/changed, what each does,
   and anything you were unsure about.
 ```
+
+## Prompt 13: Phase 12 overdue fine
+
+**Files/area:** Loan response calculation, My Books and history tables, related
+unit/integration tests, and Phase 12 documentation notes.
+
+```text
+Implement Phase 12 of IMPLEMENTATION_PLAN.md.
+
+- Follow every step in that phase exactly, in the order given.
+- Add the tests listed for that phase.
+- Don't touch code outside this phase unless it's required, and tell me if you do.
+- When finished, run the tests, then summarise: files created/changed, what each does,
+  and anything you were unsure about.
+```

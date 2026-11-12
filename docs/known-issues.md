@@ -3,7 +3,7 @@
 - Borrowing and returning update loan and book documents in separate operations, not a MongoDB transaction. A crash between writes can leave a loan/copy count inconsistent.
 - Membership expiry is not modeled or enforced.
 - Password reset has no email delivery. In development, the reset token is returned by the API and written to the server log; production needs an email provider.
-- Loan renewal and fines are not implemented.
+- Loan renewal is not implemented. The overdue fine is a numeric amount of one unit per started overdue day; no currency or other fine policy is defined.
 - Catalog pagination is simple page/limit offset pagination; there is no advanced sorting or cursor pagination.
 - JWTs are stored in browser `localStorage`, so an XSS issue could expose a session token.
 - `npm run seed` clears the configured database's loans, users, and books before inserting demo data. Run it only against a disposable development database.

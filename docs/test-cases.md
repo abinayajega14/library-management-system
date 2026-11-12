@@ -2,7 +2,7 @@
 
 Validation command: `npm test`
 
-Latest result: **21 passed, 0 failed**. The integration suite runs against an
+Latest result: **23 passed, 0 failed**. The integration suite runs against an
 ephemeral `mongodb-memory-server` database named `library_test`.
 
 ## Functional tests
@@ -37,9 +37,11 @@ ephemeral `mongodb-memory-server` database named `library_test`.
 | Test | Result |
 |---|---|
 | `Loan schema indexes and computed display status` | Pass |
+| `overdue fine counts started days and uses returnedAt for returned loans` | Pass |
 | `two members competing for the last copy yield one success` | Pass |
 | `simultaneous duplicate borrows create one active loan` | Pass |
 | `overdue loans appear on member and admin dashboards` | Pass |
+| `overdue fines are calculated on current loans and fixed in history after return` | Pass |
 
 ## Phase 10 — Manual end-to-end edge cases
 

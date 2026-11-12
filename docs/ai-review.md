@@ -103,3 +103,12 @@ documentation clarifications.
 - **What was incorrect / risky:** Prompt/review notes are backfilled rather than contemporaneous; changes not present in the conversation history cannot be independently attributed.
 - **Modifications made:** Phase 6 tests were reorganized into functional, negative, and edge-case result tables; the Phase 3 seed behavior is explicitly described as destructive.
 - **Why the changes were necessary:** Match the Phase 11 deliverables to the actual repository behavior and preserve an honest review trail.
+
+### Output 12 - Phase 12 overdue fine
+
+- **Prompt:** [Prompt 13](ai-prompts.md#prompt-13-phase-12-overdue-fine)
+- **What AI generated:** A read-time overdue fine in loan responses and a fine column on My Books and loan history.
+- **What was correct:** Fine values are derived from loan dates, are not stored, and use `returnedAt` to keep late-return amounts fixed.
+- **What was incorrect / risky:** The plan does not specify a currency or whether partial days count as a full day.
+- **Modifications made:** Counted each started 24-hour period as one unit and added unit/integration coverage for before-due, just-overdue, late-return, current-loan, and history cases.
+- **Why the changes were necessary:** Make the plan's simple `daysOverdue × 1` formula deterministic while keeping fines read-only and scoped to the requested member pages.
