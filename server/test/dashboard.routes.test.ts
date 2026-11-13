@@ -149,13 +149,67 @@ test("admin dashboard counts match seeded data and role access is restricted", a
   const originalSecret = process.env.JWT_SECRET;
   const originals = {
     userCountDocuments: UserModel.countDocuments,
+    userFind: UserModel.find,
     bookCountDocuments: BookModel.countDocuments,
     bookFind: BookModel.find,
     loanCountDocuments: LoanModel.countDocuments,
+    loanFind: LoanModel.find,
   };
   process.env.JWT_SECRET = testSecret;
 
   const countFilters: Array<Record<string, unknown> | undefined> = [];
+  const dashboardMembers = [
+    {
+      id: memberId,
+      name: "Alex Member",
+      email: "alex@example.com",
+    },
+    {
+      id: otherMemberId,
+      name: "Blair Member",
+      email: "blair@example.com",
+    },
+    {
+      id: "64a000000000000000000003",
+      name: "Casey Member",
+      email: "casey@example.com",
+    },
+  ];
+  const now = Date.now();
+  const dashboardLoans: TestLoan[] = [
+    {
+      id: "64c000000000000000000004",
+      user: memberId,
+      book: { title: "Current Book", author: "A. Writer" },
+      borrowedAt: new Date(now - 24 * 60 * 60 * 1000),
+      dueDate: new Date(now + 7 * 24 * 60 * 60 * 1000),
+      returnedAt: null,
+      status: "borrowed",
+    },
+    {
+      id: "64c000000000000000000005",
+      user: memberId,
+      book: { title: "Returned Book", author: "B. Writer" },
+      borrowedAt: new Date(now - 10 * 24 * 60 * 60 * 1000),
+      dueDate: new Date(now - 3 * 24 * 60 * 60 * 1000),
+      returnedAt: new Date(now - 4 * 24 * 60 * 60 * 1000),
+      status: "returned",
+    },
+    {
+      id: "64c000000000000000000006",
+      user: otherMemberId,
+      book: { title: "Overdue Book", author: "C. Writer" },
+      borrowedAt: new Date(now - 20 * 24 * 60 * 60 * 1000),
+      dueDate: new Date(now - 6 * 24 * 60 * 60 * 1000),
+      returnedAt: null,
+      status: "borrowed",
+    },
+  ];
+  let capturedMemberFilter: Record<string, unknown> = {};
+  let capturedMemberSelection = "";
+  let capturedMemberSort: Record<string, 1 | -1> = {};
+  let capturedDashboardLoanFilter: Record<string, unknown> = {};
+  let capturedDashboardLoanSort: Record<string, 1 | -1> = {};
   const lowAvailabilityBooks = [
     {
       id: "64b000000000000000000003",
@@ -196,7 +250,27 @@ test("admin dashboard counts match seeded data and role access is restricted", a
   Object.assign(UserModel, {
     countDocuments: async (filter?: Record<string, unknown>) => {
       countFilters.push(filter);
-      return 1;
+      return 3;
+    },
+    find: (filter: Record<string, unknown>) => {
+      capturedMemberFilter = filter;
+      let query: {
+        select: (selection: string) => typeof query;
+        sort: (sort: Record<string, 1 | -1>) => typeof query;
+        exec: () => Promise<typeof dashboardMembers>;
+      };
+      query = {
+        select: (selection) => {
+          capturedMemberSelection = selection;
+          return query;
+        },
+        sort: (sort) => {
+          capturedMemberSort = sort;
+          return query;
+        },
+        exec: async () => dashboardMembers,
+      };
+      return query;
     },
   });
   Object.assign(BookModel, {
@@ -219,6 +293,23 @@ test("admin dashboard counts match seeded data and role access is restricted", a
       countFilters.push(filter);
       return 1;
     },
+    find: (filter: Record<string, unknown>) => {
+      capturedDashboardLoanFilter = filter;
+      let query: {
+        populate: (path: string, selection: string) => typeof query;
+        sort: (sort: Record<string, 1 | -1>) => typeof query;
+        exec: () => Promise<TestLoan[]>;
+      };
+      query = {
+        populate: () => query,
+        sort: (sort) => {
+          capturedDashboardLoanSort = sort;
+          return query;
+        },
+        exec: async () => dashboardLoans,
+      };
+      return query;
+    },
   });
 
   try {
@@ -227,14 +318,62 @@ test("admin dashboard counts match seeded data and role access is restricted", a
         headers: { authorization: `Bearer ${tokenFor("admin")}` },
       });
       assert.equal(adminDashboard.status, 200);
-      assert.deepEqual(await adminDashboard.json(), {
-        totalMembers: 1,
+      const body = await adminDashboard.json();
+      assert.deepEqual(body, {
+        totalMembers: 3,
         totalBooks: 12,
         activeBorrowings: 1,
         overdueBorrowings: 1,
         lowAvailabilityBooks,
+        members: [
+          {
+            ...dashboardMembers[0],
+            loans: [
+              {
+                id: dashboardLoans[0].id,
+                book: dashboardLoans[0].book,
+                borrowedAt: dashboardLoans[0].borrowedAt.toISOString(),
+                dueDate: dashboardLoans[0].dueDate.toISOString(),
+                returnedAt: null,
+                displayStatus: "Borrowed",
+              },
+              {
+                id: dashboardLoans[1].id,
+                book: dashboardLoans[1].book,
+                borrowedAt: dashboardLoans[1].borrowedAt.toISOString(),
+                dueDate: dashboardLoans[1].dueDate.toISOString(),
+                returnedAt: dashboardLoans[1].returnedAt?.toISOString(),
+                displayStatus: "Returned",
+              },
+            ],
+          },
+          {
+            ...dashboardMembers[1],
+            loans: [
+              {
+                id: dashboardLoans[2].id,
+                book: dashboardLoans[2].book,
+                borrowedAt: dashboardLoans[2].borrowedAt.toISOString(),
+                dueDate: dashboardLoans[2].dueDate.toISOString(),
+                returnedAt: null,
+                displayStatus: "Overdue",
+              },
+            ],
+          },
+          {
+            ...dashboardMembers[2],
+            loans: [],
+          },
+        ],
       });
       assert.deepEqual(capturedBookSort, { availableCopies: 1 });
+      assert.deepEqual(capturedMemberFilter, { role: "member" });
+      assert.equal(capturedMemberSelection, "name email");
+      assert.deepEqual(capturedMemberSort, { name: 1, email: 1 });
+      assert.deepEqual(capturedDashboardLoanFilter, {
+        user: { $in: dashboardMembers.map((member) => member.id) },
+      });
+      assert.deepEqual(capturedDashboardLoanSort, { borrowedAt: -1 });
       assert.deepEqual(countFilters[0], { role: "member" });
       assert.deepEqual(countFilters[1], { status: "borrowed" });
       assert.deepEqual(
@@ -253,12 +392,18 @@ test("admin dashboard counts match seeded data and role access is restricted", a
       assert.equal(adminOnMemberDashboard.status, 403);
     });
   } finally {
-    Object.assign(UserModel, { countDocuments: originals.userCountDocuments });
+    Object.assign(UserModel, {
+      countDocuments: originals.userCountDocuments,
+      find: originals.userFind,
+    });
     Object.assign(BookModel, {
       countDocuments: originals.bookCountDocuments,
       find: originals.bookFind,
     });
-    Object.assign(LoanModel, { countDocuments: originals.loanCountDocuments });
+    Object.assign(LoanModel, {
+      countDocuments: originals.loanCountDocuments,
+      find: originals.loanFind,
+    });
     if (originalSecret === undefined) {
       delete process.env.JWT_SECRET;
     } else {

@@ -146,7 +146,9 @@ export default function BookDetailsPage() {
         <div className="overflow-hidden rounded-xl bg-slate-100">
           <BookCover
             className="aspect-[4/5] h-full w-full object-cover"
+            author={book.author}
             coverImage={book.coverImage}
+            genre={book.genre}
             key={book.id}
             title={book.title}
           />

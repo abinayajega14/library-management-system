@@ -15,7 +15,9 @@ export default function BookCard({ book }: BookCardProps) {
       <div className="relative aspect-[4/3] bg-slate-100">
         <BookCover
           className="h-full w-full object-cover"
+          author={book.author}
           coverImage={book.coverImage}
+          genre={book.genre}
           key={book.id}
           title={book.title}
         />

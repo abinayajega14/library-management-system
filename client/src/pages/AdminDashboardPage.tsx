@@ -3,7 +3,9 @@ import { Link } from "react-router-dom";
 import api from "../api/client";
 import { getApiError, type ApiErrorDetails } from "../api/errors";
 import Alert from "../components/Alert";
+import LoanTable from "../components/LoanTable";
 import Spinner from "../components/Spinner";
+import type { LoanRecord } from "../types/loan";
 
 interface LowAvailabilityBook {
   id: string;
@@ -12,15 +14,26 @@ interface LowAvailabilityBook {
   totalCopies: number;
 }
 
+interface AdminMember {
+  id: string;
+  name: string;
+  email: string;
+  loans: LoanRecord[];
+}
+
 interface AdminDashboardData {
   totalMembers: number;
   totalBooks: number;
   activeBorrowings: number;
   overdueBorrowings: number;
   lowAvailabilityBooks: LowAvailabilityBook[];
+  members: AdminMember[];
 }
 
-const statLabels: Array<{ key: keyof Omit<AdminDashboardData, "lowAvailabilityBooks">; label: string }> = [
+const statLabels: Array<{
+  key: keyof Omit<AdminDashboardData, "lowAvailabilityBooks" | "members">;
+  label: string;
+}> = [
   { key: "totalMembers", label: "Total Members" },
   { key: "totalBooks", label: "Total Books" },
   { key: "activeBorrowings", label: "Active Borrowings" },
@@ -111,6 +124,40 @@ export default function AdminDashboardPage() {
             ) : (
               <p className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-600">
                 No low-availability books.
+              </p>
+            )}
+          </section>
+          <section className="mt-8">
+            <h2 className="mb-3 text-xl font-semibold text-slate-900">Registered members</h2>
+            {dashboard.members.length > 0 ? (
+              <ul className="space-y-4">
+                {dashboard.members.map((member) => (
+                  <li
+                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+                    key={member.id}
+                  >
+                    <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold text-slate-900">{member.name}</h3>
+                        <p className="mt-1 text-sm text-slate-600">{member.email}</p>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
+                        {member.loans.length} {member.loans.length === 1 ? "loan" : "loans"}
+                      </span>
+                    </header>
+                    {member.loans.length > 0 ? (
+                      <LoanTable loans={member.loans} />
+                    ) : (
+                      <p className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-5 text-sm text-slate-600">
+                        No borrowing history.
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-600">
+                No registered members.
               </p>
             )}
           </section>

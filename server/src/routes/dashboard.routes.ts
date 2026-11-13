@@ -51,6 +51,7 @@ router.get("/admin", authenticate, authorize("admin"), async (_req, res, next) =
       activeBorrowings,
       overdueBorrowings,
       lowAvailabilityBooks,
+      members,
     ] = await Promise.all([
       UserModel.countDocuments({ role: "member" }),
       BookModel.countDocuments(),
@@ -59,13 +60,54 @@ router.get("/admin", authenticate, authorize("admin"), async (_req, res, next) =
       BookModel.find({ availableCopies: { $lte: 2 } })
         .sort({ availableCopies: 1 })
         .exec(),
+      UserModel.find({ role: "member" })
+        .select("name email")
+        .sort({ name: 1, email: 1 })
+        .exec(),
     ]);
+    const loans = await LoanModel.find({
+      user: { $in: members.map((member) => member.id) },
+    })
+      .populate("book", "title author")
+      .sort({ borrowedAt: -1 })
+      .exec();
+    const loansByMember = new Map<
+      string,
+      Array<{
+        id: string;
+        book: ReturnType<typeof getPopulatedBookSummary>;
+        borrowedAt: Date;
+        dueDate: Date;
+        returnedAt: Date | null;
+        displayStatus: ReturnType<typeof getDisplayStatus>;
+      }>
+    >();
+
+    for (const loan of loans) {
+      const memberId = loan.user.toString();
+      const memberLoans = loansByMember.get(memberId) ?? [];
+      memberLoans.push({
+        id: loan.id,
+        book: getPopulatedBookSummary(loan.book),
+        borrowedAt: loan.borrowedAt,
+        dueDate: loan.dueDate,
+        returnedAt: loan.returnedAt,
+        displayStatus: getDisplayStatus(loan),
+      });
+      loansByMember.set(memberId, memberLoans);
+    }
 
     res.status(200).json({
       totalMembers,
       totalBooks,
       activeBorrowings,
       overdueBorrowings,
+      members: members.map((member) => ({
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        loans: loansByMember.get(member.id) ?? [],
+      })),
       lowAvailabilityBooks: lowAvailabilityBooks.map((book) => ({
         id: book.id,
         title: book.title,
