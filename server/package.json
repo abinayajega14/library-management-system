@@ -8,7 +8,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "start": "node dist/server.js",
-    "test": "node --import tsx --test test/auth.routes.test.ts"
+    "seed": "tsx src/scripts/seed.ts",
+    "test": "node --import tsx --test test/auth.routes.test.ts test/books.routes.test.ts test/loans.routes.test.ts test/dashboard.routes.test.ts test/integration.test.ts"
   },
   "keywords": [],
   "author": "",
@@ -28,6 +29,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.6",
+    "mongodb-memory-server": "^10.2.3",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

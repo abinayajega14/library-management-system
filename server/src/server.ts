@@ -3,7 +3,7 @@ import app from "./app";
 import { connectToDatabase } from "./config/db";
 import { getJwtSecret } from "./config/jwt";
 
-const port = Number.parseInt(process.env.PORT ?? "3000", 10);
+const port = Number.parseInt(process.env.PORT ?? "5000", 10);
 
 async function startServer(): Promise<void> {
   getJwtSecret();

@@ -1,12 +1,20 @@
 import express, { NextFunction, Request, Response } from "express";
 import authRouter from "./routes/auth.routes";
+import booksRouter from "./routes/books.routes";
+import dashboardRouter from "./routes/dashboard.routes";
 import healthRouter from "./routes/health.routes";
+import loansRouter from "./routes/loans.routes";
+import usersRouter from "./routes/users.routes";
 
 const app = express();
 
 app.use(express.json());
-app.use("/health", healthRouter);
-app.use("/auth", authRouter);
+app.use("/api/health", healthRouter);
+app.use("/api/auth", authRouter);
+app.use("/api/users", usersRouter);
+app.use("/api/books", booksRouter);
+app.use("/api/loans", loansRouter);
+app.use("/api/dashboard", dashboardRouter);
 
 app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (res.headersSent) {
