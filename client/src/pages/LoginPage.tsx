@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { getApiError, type ApiErrorDetails } from "../api/errors";
 import Alert from "../components/Alert";
 import FieldError from "../components/FieldError";
+import PasswordInput from "../components/PasswordInput";
 import { useAuth } from "../context/useAuth";
 import { validateEmail, validatePassword } from "../utils/validation";
 
@@ -68,12 +69,11 @@ export default function LoginPage() {
           <label className="text-sm font-medium text-slate-700" htmlFor="password">
             Password
           </label>
-          <input
+          <PasswordInput
             autoComplete="current-password"
             className={inputClass}
             id="password"
-            onChange={(event) => setPassword(event.target.value)}
-            type="password"
+            onChange={setPassword}
             value={password}
           />
           <FieldError id="password-error" message={fieldErrors.password} />

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Alert from "../components/Alert";
 import FieldError from "../components/FieldError";
+import PasswordInput from "../components/PasswordInput";
 import { getApiError, type ApiErrorDetails } from "../api/errors";
 import { useAuth } from "../context/useAuth";
 import { validateEmail, validatePassword, validateRequired } from "../utils/validation";
@@ -85,12 +86,11 @@ export default function RegisterPage() {
           <label className="text-sm font-medium text-slate-700" htmlFor="password">
             Password
           </label>
-          <input
+          <PasswordInput
             autoComplete="new-password"
             className={inputClass}
             id="password"
-            onChange={(event) => setPassword(event.target.value)}
-            type="password"
+            onChange={setPassword}
             value={password}
           />
           <FieldError id="password-error" message={fieldErrors.password} />
