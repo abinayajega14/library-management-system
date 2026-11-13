@@ -7,5 +7,6 @@ build/
 *.log
 .DS_Store
 coverage/
+.postman/
 postman/environments/
 postman/globals/
