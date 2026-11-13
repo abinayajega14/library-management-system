@@ -44,9 +44,9 @@ Seed demo users, books, and one overdue loan:
 npm run seed
 ```
 
-**Use a disposable development database for seeding.** The seed script deletes
-the existing loans, users, and books in the configured database before adding
-the demo data.
+The seed script adds missing demo users and books and creates the overdue demo
+loan only when it is missing. It does not delete or overwrite existing records,
+so running it again will preserve member accounts and library changes.
 
 Start the API and client together:
 
@@ -95,7 +95,7 @@ docs/
 ```
 
 ## Documentation
-
+ - [AI Plans](docs/ai-plan.md)
 - [Requirements analysis](docs/requirements-analysis.md)
 - [Business rules and validations](docs/business-rules-validations.md)
 - [Assumptions](docs/assumptions.md)

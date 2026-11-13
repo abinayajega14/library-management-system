@@ -106,48 +106,65 @@ const books: Array<Omit<Book, "availableCopies"> & { availableCopies: number }> 
   },
 ];
 
-async function seed(): Promise<void> {
-  await connectToDatabase();
+export async function ensureSeedData(): Promise<void> {
+  const [adminPasswordHash, memberPasswordHash] = await Promise.all([
+    bcrypt.hash("Admin@123", 12),
+    bcrypt.hash("Member@123", 12),
+  ]);
 
-  try {
-    await LoanModel.deleteMany({});
-    await UserModel.deleteMany({});
-    await BookModel.deleteMany({});
-
-    const [adminPasswordHash, memberPasswordHash] = await Promise.all([
-      bcrypt.hash("Admin@123", 12),
-      bcrypt.hash("Member@123", 12),
-    ]);
-
-    await UserModel.create([
+  await Promise.all([
+    UserModel.updateOne(
+      { email: "admin@library.test" },
       {
-        name: "Library Admin",
-        email: "admin@library.test",
-        passwordHash: adminPasswordHash,
-        role: "admin",
+        $setOnInsert: {
+          name: "Library Admin",
+          email: "admin@library.test",
+          passwordHash: adminPasswordHash,
+          role: "admin",
+        },
       },
+      { upsert: true },
+    ),
+    UserModel.updateOne(
+      { email: "member@library.test" },
       {
-        name: "Demo Member",
-        email: "member@library.test",
-        passwordHash: memberPasswordHash,
-        role: "member",
+        $setOnInsert: {
+          name: "Demo Member",
+          email: "member@library.test",
+          passwordHash: memberPasswordHash,
+          role: "member",
+        },
       },
-    ]);
-    await BookModel.insertMany(books);
+      { upsert: true },
+    ),
+    ...books.map((book) =>
+      BookModel.updateOne(
+        { isbn: book.isbn },
+        { $setOnInsert: book },
+        { upsert: true },
+      ),
+    ),
+  ]);
 
-    const member = await UserModel.findOne({ email: "member@library.test" });
-    const overdueBook = await BookModel.findOne({ isbn: "9780134685991" });
+  const member = await UserModel.findOne({ email: "member@library.test" });
+  const overdueBook = await BookModel.findOne({ isbn: "9780134685991" });
 
-    if (!member || !overdueBook) {
-      throw new Error("Unable to find seeded member or book for the overdue loan");
-    }
+  if (!member || !overdueBook) {
+    throw new Error("Unable to find seeded member or book for the overdue loan");
+  }
 
+  const existingDemoLoan = await LoanModel.exists({
+    user: member._id,
+    book: overdueBook._id,
+  });
+
+  if (!existingDemoLoan) {
     const dueDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
     const borrowedAt = new Date(dueDate.getTime() - 14 * 24 * 60 * 60 * 1000);
     const bookWithOneFewerCopy = await BookModel.findOneAndUpdate(
       { _id: overdueBook._id, availableCopies: { $gt: 0 } },
       { $inc: { availableCopies: -1 } },
-      { new: true },
+      { returnDocument: "after" },
     );
 
     if (!bookWithOneFewerCopy) {
@@ -162,14 +179,24 @@ async function seed(): Promise<void> {
       returnedAt: null,
       status: "borrowed",
     });
+  }
 
-    console.log("Seeded 2 users, 12 books, and 1 overdue loan.");
+  console.log("Demo users, books, and overdue loan ensured without overwriting existing data.");
+}
+
+async function seed(): Promise<void> {
+  await connectToDatabase();
+
+  try {
+    await ensureSeedData();
   } finally {
     await mongoose.disconnect();
   }
 }
 
-seed().catch((error: unknown) => {
-  console.error("Seed failed:", error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  seed().catch((error: unknown) => {
+    console.error("Seed failed:", error);
+    process.exitCode = 1;
+  });
+}

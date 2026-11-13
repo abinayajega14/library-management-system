@@ -9,6 +9,7 @@ export interface User {
   role: UserRole;
   phone?: string;
   address?: string;
+  membershipExpiresAt: Date;
   resetTokenHash?: string;
   resetTokenExpires?: Date;
   createdAt: Date;
@@ -21,6 +22,11 @@ const userSchema = new Schema<User>({
   role: { type: String, enum: ["member", "admin"], default: "member", required: true },
   phone: { type: String, trim: true },
   address: { type: String, trim: true },
+  membershipExpiresAt: {
+    type: Date,
+    required: true,
+    default: () => new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+  },
   resetTokenHash: { type: String, select: false },
   resetTokenExpires: { type: Date, select: false },
   createdAt: { type: Date, default: Date.now, required: true },

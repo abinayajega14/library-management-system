@@ -9,6 +9,7 @@ export interface AuthUser {
   role: UserRole;
   phone?: string;
   address?: string;
+  membershipExpiresAt?: string;
   createdAt: string;
 }
 

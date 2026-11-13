@@ -14,6 +14,9 @@ const adminLinks = [
   { label: "Catalog", to: "/" },
   { label: "Admin", to: "/admin" },
   { label: "Add Book", to: "/admin/books/new" },
+  { label: "My Books", to: "/my-books" },
+  { label: "History", to: "/history" },
+  { label: "Profile", to: "/profile" },
 ];
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>

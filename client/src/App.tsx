@@ -71,7 +71,7 @@ export default function App() {
           />
           <Route
             element={
-              <ProtectedRoute role="member">
+              <ProtectedRoute>
                 <MyBooksPage />
               </ProtectedRoute>
             }
@@ -79,7 +79,7 @@ export default function App() {
           />
           <Route
             element={
-              <ProtectedRoute role="member">
+              <ProtectedRoute>
                 <HistoryPage />
               </ProtectedRoute>
             }

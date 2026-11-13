@@ -2,7 +2,7 @@
 
 Validation command: `npm test`
 
-Latest result: **23 passed, 0 failed**. The integration suite runs against an
+Latest result: **26 passed, 0 failed**. The integration suite runs against an
 ephemeral `mongodb-memory-server` database named `library_test`.
 
 ## Functional tests
@@ -19,6 +19,8 @@ ephemeral `mongodb-memory-server` database named `library_test`.
 | `catalog supports title and author search, genre filters, and combined queries` | Pass |
 | `loan routes enforce borrowing rules, return copies, and scope reads to the member` | Pass |
 | `borrowing, returning, and history update copy counts correctly` | Pass |
+| `admins can borrow, return, and view their own loans as members` | Pass |
+| `legacy users are assigned an expiry based on their account creation date` | Pass |
 | `member dashboard includes only the member's current and overdue loans` | Pass |
 | `admin dashboard counts match seeded data and role access is restricted` | Pass |
 
@@ -30,6 +32,7 @@ ephemeral `mongodb-memory-server` database named `library_test`.
 | `Book schema declares a unique ISBN index and validates copy counts` | Pass |
 | `member cannot create books; duplicate ISBN and negative copies are rejected` | Pass |
 | `unavailable books and borrowing more than three active books are rejected` | Pass |
+| `borrowing requires a complete profile and an active membership` | Pass |
 | `admin cannot reduce total copies below the number currently borrowed` | Pass |
 
 ## Edge-case and concurrency tests

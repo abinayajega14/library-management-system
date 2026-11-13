@@ -173,14 +173,7 @@ export default function BookDetailsPage() {
             </p>
           </div>
           <div className="mt-7">
-            {user?.role === "admin" ? (
-              <Link
-                className="inline-flex rounded-lg bg-emerald-800 px-5 py-2.5 font-semibold text-white hover:bg-emerald-900"
-                to={`/admin/books/${book.id}/edit`}
-              >
-                Edit book
-              </Link>
-            ) : (
+            <div className="flex flex-wrap gap-3">
               <button
                 className="inline-flex min-w-36 items-center justify-center gap-2 rounded-lg bg-emerald-800 px-5 py-2.5 font-semibold text-white hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={book.availableCopies === 0 || borrowing}
@@ -196,7 +189,15 @@ export default function BookDetailsPage() {
                     ? "Unavailable"
                     : "Borrow"}
               </button>
-            )}
+              {user?.role === "admin" && (
+                <Link
+                  className="inline-flex rounded-lg border border-emerald-800 px-5 py-2.5 font-semibold text-emerald-900 hover:bg-emerald-50"
+                  to={`/admin/books/${book.id}/edit`}
+                >
+                  Edit book
+                </Link>
+              )}
+            </div>
           </div>
         </div>
       </div>

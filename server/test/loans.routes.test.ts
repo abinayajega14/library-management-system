@@ -5,14 +5,17 @@ import jwt from "jsonwebtoken";
 import app from "../src/app";
 import { BookModel } from "../src/models/book.model";
 import { LoanModel } from "../src/models/loan.model";
+import { UserModel } from "../src/models/user.model";
 import { getDisplayStatus, getFineAmount } from "../src/utils/loanStatus";
 
 const testSecret = "test-jwt-secret";
 const memberId = "64a000000000000000000001";
 const otherMemberId = "64a000000000000000000002";
+const adminId = "64a000000000000000000003";
 const bookId = "64b000000000000000000001";
 const noCopiesBookId = "64b000000000000000000002";
 const fourthBookId = "64b000000000000000000003";
+const adminBookId = "64b000000000000000000004";
 
 type TestBook = {
   id: string;
@@ -112,6 +115,7 @@ test("overdue fine counts started days and uses returnedAt for returned loans", 
 test("loan routes enforce borrowing rules, return copies, and scope reads to the member", async () => {
   const originalSecret = process.env.JWT_SECRET;
   const originals = {
+    userFindById: UserModel.findById,
     bookFindById: BookModel.findById,
     bookFindOneAndUpdate: BookModel.findOneAndUpdate,
     bookUpdateOne: BookModel.updateOne,
@@ -132,6 +136,10 @@ test("loan routes enforce borrowing rules, return copies, and scope reads to the
     [
       fourthBookId,
       { id: fourthBookId, title: "Another Book", author: "C. Writer", availableCopies: 1 },
+    ],
+    [
+      adminBookId,
+      { id: adminBookId, title: "Admin Book", author: "D. Writer", availableCopies: 1 },
     ],
   ]);
   let loans: TestLoan[] = [];
@@ -201,6 +209,15 @@ test("loan routes enforce borrowing rules, return copies, and scope reads to the
       }
       return { matchedCount: book ? 1 : 0 };
     },
+  });
+
+  Object.assign(UserModel, {
+    findById: async () => ({
+      name: "Library User",
+      phone: "555-0100",
+      address: "1 Library Lane",
+      membershipExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    }),
   });
 
   Object.assign(LoanModel, {
@@ -311,8 +328,11 @@ test("loan routes enforce borrowing rules, return copies, and scope reads to the
           body: JSON.stringify(body),
         });
 
-      const adminAttempt = await postBorrow(tokenFor("admin"), { bookId });
-      assert.equal(adminAttempt.status, 403);
+      const adminBorrow = await postBorrow(tokenFor("admin", adminId), {
+        bookId: adminBookId,
+      });
+      assert.equal(adminBorrow.status, 201);
+      assert.equal(books.get(adminBookId)?.availableCopies, 0);
 
       const invalidBookId = await postBorrow(tokenFor("member"), { bookId: "bad-id" });
       assert.equal(invalidBookId.status, 400);
@@ -332,7 +352,10 @@ test("loan routes enforce borrowing rules, return copies, and scope reads to the
 
       const duplicateBorrow = await postBorrow(tokenFor("member"), { bookId });
       assert.equal(duplicateBorrow.status, 409);
-      assert.equal(loans.filter((loan) => loan.status === "borrowed").length, 1);
+      assert.equal(
+        loans.filter((loan) => loan.user === memberId && loan.status === "borrowed").length,
+        1,
+      );
 
       const noCopiesBorrow = await postBorrow(tokenFor("member"), {
         bookId: noCopiesBookId,
@@ -451,6 +474,7 @@ test("loan routes enforce borrowing rules, return copies, and scope reads to the
       });
     }
   } finally {
+    Object.assign(UserModel, { findById: originals.userFindById });
     Object.assign(BookModel, {
       findById: originals.bookFindById,
       findOneAndUpdate: originals.bookFindOneAndUpdate,

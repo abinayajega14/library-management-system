@@ -23,7 +23,7 @@ export default function ProfilePage() {
     phone: user?.phone ?? "",
     address: user?.address ?? "",
   }));
-  const [fieldError, setFieldError] = useState<string>();
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [apiError, setApiError] = useState<ApiErrorDetails | null>(null);
   const [success, setSuccess] = useState<string>();
   const [submitting, setSubmitting] = useState(false);
@@ -34,11 +34,21 @@ export default function ProfilePage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validationError = validateRequired(form.name, "Name");
-    setFieldError(validationError);
+    const errors: Record<string, string> = {};
+    const nameError = validateRequired(form.name, "Name");
+    const phoneError = validateRequired(form.phone, "Phone");
+    const addressError = validateRequired(form.address, "Address");
+    if (nameError) errors.name = nameError;
+    if (phoneError) errors.phone = phoneError;
+    if (addressError) errors.address = addressError;
+    const digitsInPhone = form.phone.match(/\d/g)?.length ?? 0;
+    if (!phoneError && (!/^[+()\d .-]+$/.test(form.phone) || digitsInPhone < 7 || digitsInPhone > 15)) {
+      errors.phone = "Enter a valid phone number";
+    }
+    setFieldErrors(errors);
     setApiError(null);
     setSuccess(undefined);
-    if (validationError) return;
+    if (Object.keys(errors).length > 0) return;
 
     setSubmitting(true);
     try {
@@ -64,7 +74,19 @@ export default function ProfilePage() {
   return (
     <section className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
       <h1 className="text-2xl font-bold text-slate-900">Your profile</h1>
-      <p className="mt-1 text-sm text-slate-600">Update the contact details on your account.</p>
+      <p className="mt-1 text-sm text-slate-600">
+        Your name, phone, and address must be complete before you can borrow books.
+      </p>
+      {/* <p className="mt-2 text-sm text-slate-600">
+        Membership expires:{" "}
+        <span className="font-medium text-slate-800">
+          {user?.membershipExpiresAt
+            ? new Date(user.membershipExpiresAt).toLocaleDateString(undefined, {
+                dateStyle: "long",
+              })
+            : "Not set - contact library administration"}
+        </span>
+      </p> */}
       {apiError && (
         <div className="mt-5">
           <Alert variant="error" message={apiError.message} errors={apiError.errors} />
@@ -84,11 +106,12 @@ export default function ProfilePage() {
             autoComplete="name"
             className={inputClass}
             id="name"
+            required
             onChange={(event) => updateField("name", event.target.value)}
             type="text"
             value={form.name}
           />
-          <FieldError id="name-error" message={fieldError} />
+          <FieldError id="name-error" message={fieldErrors.name} />
         </div>
         <div>
           <label className="text-sm font-medium text-slate-700" htmlFor="email">
@@ -110,10 +133,12 @@ export default function ProfilePage() {
             autoComplete="tel"
             className={inputClass}
             id="phone"
+            required
             onChange={(event) => updateField("phone", event.target.value)}
             type="tel"
             value={form.phone}
           />
+          <FieldError id="phone-error" message={fieldErrors.phone} />
         </div>
         <div>
           <label className="text-sm font-medium text-slate-700" htmlFor="address">
@@ -123,10 +148,12 @@ export default function ProfilePage() {
             autoComplete="street-address"
             className={inputClass}
             id="address"
+            required
             onChange={(event) => updateField("address", event.target.value)}
             rows={3}
             value={form.address}
           />
+          <FieldError id="address-error" message={fieldErrors.address} />
         </div>
         <button
           className="rounded-lg bg-emerald-800 px-5 py-2.5 font-semibold text-white hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60"

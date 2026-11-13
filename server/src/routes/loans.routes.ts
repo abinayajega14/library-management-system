@@ -4,6 +4,7 @@ import { z } from "zod";
 import { authenticate, authorize } from "../middleware/auth.middleware";
 import { BookModel, type Book } from "../models/book.model";
 import { LoanModel, type Loan } from "../models/loan.model";
+import { UserModel } from "../models/user.model";
 import {
   getCurrentLoans,
   getPopulatedBookSummary,
@@ -55,7 +56,7 @@ function isDuplicateKeyError(error: unknown): boolean {
   );
 }
 
-router.post("/", authenticate, authorize("member"), async (req, res, next) => {
+router.post("/", authenticate, authorize("member", "admin"), async (req, res, next) => {
   const parsed = borrowSchema.safeParse(req.body);
 
   if (!parsed.success) {
@@ -71,6 +72,34 @@ router.post("/", authenticate, authorize("member"), async (req, res, next) => {
   const { bookId } = parsed.data;
 
   try {
+    const user = await UserModel.findById(req.auth.userId);
+
+    if (!user) {
+      res.status(401).json({ message: "Authentication required" });
+      return;
+    }
+
+    if (
+      !user.name.trim() ||
+      !user.phone?.trim() ||
+      !user.address?.trim()
+    ) {
+      res.status(403).json({
+        message: "Complete your profile with your name, phone, and address before borrowing",
+      });
+      return;
+    }
+
+    if (
+      !user.membershipExpiresAt ||
+      user.membershipExpiresAt.getTime() <= Date.now()
+    ) {
+      res.status(403).json({
+        message: "Your membership has expired. Contact library administration to renew it",
+      });
+      return;
+    }
+
     const book = await BookModel.findById(bookId);
 
     if (!book) {
@@ -141,7 +170,7 @@ router.post("/", authenticate, authorize("member"), async (req, res, next) => {
 router.post(
   "/:id/return",
   authenticate,
-  authorize("member"),
+  authorize("member", "admin"),
   async (req, res, next) => {
     if (!req.auth) {
       res.status(401).json({ message: "Authentication required" });
@@ -179,7 +208,7 @@ router.post(
   },
 );
 
-router.get("/me/current", authenticate, authorize("member"), async (req, res, next) => {
+router.get("/me/current", authenticate, authorize("member", "admin"), async (req, res, next) => {
   if (!req.auth) {
     res.status(401).json({ message: "Authentication required" });
     return;
@@ -193,7 +222,7 @@ router.get("/me/current", authenticate, authorize("member"), async (req, res, ne
   }
 });
 
-router.get("/me/history", authenticate, authorize("member"), async (req, res, next) => {
+router.get("/me/history", authenticate, authorize("member", "admin"), async (req, res, next) => {
   if (!req.auth) {
     res.status(401).json({ message: "Authentication required" });
     return;

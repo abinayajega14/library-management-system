@@ -6,9 +6,11 @@ import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import app from "../src/app";
+import { backfillMembershipExpiries } from "../src/config/db";
 import { BookModel } from "../src/models/book.model";
 import { LoanModel } from "../src/models/loan.model";
 import { UserModel, type UserRole } from "../src/models/user.model";
+import { ensureSeedData } from "../src/scripts/seed";
 
 const testSecret = "integration-test-jwt-secret";
 const testPassword = "TestPassword@123";
@@ -52,6 +54,8 @@ async function createUser(role: UserRole = "member") {
     email: `${role}-${userSequence}@library.test`,
     passwordHash: await bcrypt.hash(testPassword, 4),
     role,
+    phone: "555-0100",
+    address: "1 Library Lane",
   });
 }
 
@@ -170,6 +174,9 @@ test("registration validates required fields, email, password, and duplicate acc
   const registeredUser = (await registration.json()).user;
   assert.equal(registeredUser.role, "member");
   assert.equal("passwordHash" in registeredUser, false);
+  const membershipExpiresAt = new Date(registeredUser.membershipExpiresAt).getTime();
+  assert.ok(membershipExpiresAt > Date.now() + 364 * 24 * 60 * 60 * 1000);
+  assert.ok(membershipExpiresAt <= Date.now() + 366 * 24 * 60 * 60 * 1000);
 
   const duplicateRegistration = await request("/api/auth/register", {
     method: "POST",
@@ -189,6 +196,23 @@ test("registration validates required fields, email, password, and duplicate acc
     body: { email: "member@library.test", password: "wrong password" },
   });
   assert.equal(invalidLogin.status, 401);
+});
+
+test("legacy users are assigned an expiry based on their account creation date", async () => {
+  const member = await createUser();
+  await UserModel.updateOne(
+    { _id: member.id },
+    { $unset: { membershipExpiresAt: 1 } },
+  );
+
+  await backfillMembershipExpiries();
+
+  const migratedMember = await UserModel.findById(member.id);
+  assert.ok(migratedMember?.membershipExpiresAt);
+  assert.equal(
+    migratedMember.membershipExpiresAt.getTime(),
+    member.createdAt.getTime() + 365 * 24 * 60 * 60 * 1000,
+  );
 });
 
 test("catalog supports title and author search, genre filters, and combined queries", async () => {
@@ -328,6 +352,75 @@ test("borrowing, returning, and history update copy counts correctly", async () 
   assert.equal(historyLoans[0].displayStatus, "Returned");
 });
 
+test("borrowing requires a complete profile and an active membership", async () => {
+  const member = await createUser();
+  const token = await loginAs(member);
+  const book = await createBook({ totalCopies: 1 });
+
+  await UserModel.updateOne({ _id: member.id }, { $unset: { phone: 1 } });
+  const incompleteProfileBorrow = await request("/api/loans", {
+    method: "POST",
+    token,
+    body: { bookId: book.id },
+  });
+  assert.equal(incompleteProfileBorrow.status, 403);
+  assert.match((await incompleteProfileBorrow.json()).message, /complete your profile/i);
+  assert.equal(await LoanModel.countDocuments({ user: member.id }), 0);
+
+  await UserModel.updateOne(
+    { _id: member.id },
+    { $set: { phone: "555-0100", membershipExpiresAt: new Date(Date.now() - 1) } },
+  );
+  const expiredMembershipBorrow = await request("/api/loans", {
+    method: "POST",
+    token,
+    body: { bookId: book.id },
+  });
+  assert.equal(expiredMembershipBorrow.status, 403);
+  assert.match((await expiredMembershipBorrow.json()).message, /membership has expired/i);
+  assert.equal(await LoanModel.countDocuments({ user: member.id }), 0);
+
+  await UserModel.updateOne(
+    { _id: member.id },
+    { $set: { membershipExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) } },
+  );
+  const activeMembershipBorrow = await request("/api/loans", {
+    method: "POST",
+    token,
+    body: { bookId: book.id },
+  });
+  assert.equal(activeMembershipBorrow.status, 201);
+});
+
+test("admins can borrow, return, and view their own loans as members", async () => {
+  const admin = await createUser("admin");
+  const token = await loginAs(admin);
+  const book = await createBook({ totalCopies: 1 });
+
+  const borrow = await request("/api/loans", {
+    method: "POST",
+    token,
+    body: { bookId: book.id },
+  });
+  assert.equal(borrow.status, 201);
+  const loanId = (await borrow.json()).loan.id as string;
+
+  const currentLoans = await request("/api/loans/me/current", { token });
+  assert.equal(currentLoans.status, 200);
+  assert.equal((await currentLoans.json()).loans[0].id, loanId);
+
+  const returned = await request(`/api/loans/${loanId}/return`, {
+    method: "POST",
+    token,
+  });
+  assert.equal(returned.status, 200);
+  assert.equal((await returned.json()).loan.status, "returned");
+
+  const history = await request("/api/loans/me/history", { token });
+  assert.equal(history.status, 200);
+  assert.equal((await history.json()).loans[0].id, loanId);
+});
+
 test("overdue fines are calculated on current loans and fixed in history after return", async () => {
   const member = await createUser();
   const token = await loginAs(member);
@@ -445,6 +538,134 @@ test("profile updates ignore privileged fields and password reset works end-to-e
     body: { token: "invalid-token", password: "UpdatedPassword@123" },
   });
   assert.equal(invalidReset.status, 400);
+});
+
+test("book and member changes persist after reconnecting to MongoDB", async () => {
+  const admin = await createUser("admin");
+  const adminToken = await loginAs(admin);
+  const createBook = await request("/api/books", {
+    method: "POST",
+    token: adminToken,
+    body: {
+      title: "Persistent Book",
+      author: "Test Author",
+      genre: "Fiction",
+      isbn: "1234567890",
+      totalCopies: 2,
+    },
+  });
+  assert.equal(createBook.status, 201);
+  const createdBook = (await createBook.json()).book;
+
+  const bookUpdate = await request(`/api/books/${createdBook.id}`, {
+    method: "PUT",
+    token: adminToken,
+    body: {
+      title: "Updated Persistent Book",
+      coverImage: "https://example.com/cover.jpg",
+    },
+  });
+  assert.equal(bookUpdate.status, 200);
+
+  const registration = await request("/api/auth/register", {
+    method: "POST",
+    body: {
+      name: "Persistent Member",
+      email: "persistent-member@library.test",
+      password: testPassword,
+    },
+  });
+  assert.equal(registration.status, 201);
+  const registeredMember = (await registration.json()).user;
+
+  const forgot = await request("/api/auth/forgot-password", {
+    method: "POST",
+    body: { email: registeredMember.email },
+  });
+  assert.equal(forgot.status, 200);
+  const resetToken = (await forgot.json()).resetToken as string;
+  const reset = await request("/api/auth/reset-password", {
+    method: "POST",
+    body: { token: resetToken, password: "PersistentPassword@123" },
+  });
+  assert.equal(reset.status, 200);
+
+  await mongoose.disconnect();
+  assert.ok(mongoServer);
+  await mongoose.connect(mongoServer.getUri(), { dbName: "library_test" });
+
+  const persistedBook = await BookModel.findById(createdBook.id);
+  assert.equal(persistedBook?.title, "Updated Persistent Book");
+  assert.equal(persistedBook?.coverImage, "https://example.com/cover.jpg");
+
+  const persistedMember = await UserModel.findOne({
+    email: registeredMember.email,
+  });
+  assert.ok(persistedMember);
+  assert.equal(persistedMember.name, "Persistent Member");
+  assert.equal(
+    (
+      await request("/api/auth/login", {
+        method: "POST",
+        body: {
+          email: registeredMember.email,
+          password: "PersistentPassword@123",
+        },
+      })
+    ).status,
+    200,
+  );
+});
+
+test("demo seeding preserves existing data and is safe to rerun", async () => {
+  const passwordHash = await bcrypt.hash(testPassword, 4);
+  const member = await UserModel.create({
+    name: "Existing Demo Member",
+    email: "member@library.test",
+    passwordHash,
+    role: "member",
+  });
+  const book = await BookModel.create({
+    title: "Existing Demo Book",
+    author: "Existing Author",
+    genre: "Reference",
+    isbn: "9780134685991",
+    coverImage: "https://example.com/existing-cover.jpg",
+    totalCopies: 3,
+    availableCopies: 3,
+  });
+  const registeredMember = await UserModel.create({
+    name: "Registered Member",
+    email: "registered-member@library.test",
+    passwordHash,
+    role: "member",
+  });
+  const registeredBook = await BookModel.create({
+    title: "Registered Book",
+    author: "Registered Author",
+    genre: "History",
+    isbn: "1234567890",
+    coverImage: "https://example.com/registered-cover.jpg",
+    totalCopies: 2,
+    availableCopies: 2,
+  });
+
+  await ensureSeedData();
+  await ensureSeedData();
+
+  const persistedMember = await UserModel.findById(member.id);
+  assert.equal(persistedMember?.name, "Existing Demo Member");
+  assert.ok(await UserModel.findById(registeredMember.id));
+
+  const persistedBook = await BookModel.findById(book.id);
+  assert.equal(persistedBook?.title, "Existing Demo Book");
+  assert.equal(persistedBook?.coverImage, "https://example.com/existing-cover.jpg");
+  assert.equal(persistedBook?.availableCopies, 2);
+  assert.ok(await BookModel.findById(registeredBook.id));
+  assert.equal(
+    await LoanModel.countDocuments({ user: member.id, book: book.id }),
+    1,
+  );
 });
 
 test("two members competing for the last copy yield one success", async () => {

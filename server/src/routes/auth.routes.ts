@@ -38,6 +38,7 @@ function toSafeUser(user: HydratedDocument<User>) {
     role: user.role,
     phone: user.phone,
     address: user.address,
+    membershipExpiresAt: user.membershipExpiresAt,
     createdAt: user.createdAt,
   };
 }

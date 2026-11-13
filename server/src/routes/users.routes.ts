@@ -6,9 +6,21 @@ import { UserModel } from "../models/user.model";
 const router = Router();
 
 const updateProfileSchema = z.object({
-  name: z.string().trim().min(1, "Name is required"),
-  phone: z.string().trim().optional(),
-  address: z.string().trim().optional(),
+  name: z.string().trim().min(1, "Name is required").max(100),
+  phone: z
+    .string()
+    .trim()
+    .max(25)
+    .refine(
+      (value) =>
+        value === "" ||
+        (/^[+()\d .-]+$/.test(value) &&
+          (value.match(/\d/g)?.length ?? 0) >= 7 &&
+          (value.match(/\d/g)?.length ?? 0) <= 15),
+      "Enter a valid phone number",
+    )
+    .optional(),
+  address: z.string().trim().max(200).optional(),
 });
 
 router.patch("/me", authenticate, async (req, res, next) => {
@@ -49,6 +61,7 @@ router.patch("/me", authenticate, async (req, res, next) => {
         role: user.role,
         phone: user.phone,
         address: user.address,
+        membershipExpiresAt: user.membershipExpiresAt,
         createdAt: user.createdAt,
       },
     });
