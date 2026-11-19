@@ -1,8 +1,13 @@
+
 import axios from "axios";
 
 export const TOKEN_STORAGE_KEY = "token";
 
-const api = axios.create({ baseURL: "/api" });
+const api = axios.create({
+  baseURL: import.meta.env.PROD
+    ? "https://library-management-system-m320.onrender.com/api"
+    : "/api",
+});
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_STORAGE_KEY);
