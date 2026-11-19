@@ -1,4 +1,7 @@
+
 import express, { NextFunction, Request, Response } from "express";
+import cors from "cors";
+
 import bookEngagementRouter from "./routes/book-engagement.routes";
 import authRouter from "./routes/auth.routes";
 import booksRouter from "./routes/books.routes";
@@ -10,7 +13,21 @@ import usersRouter from "./routes/users.routes";
 
 const app = express();
 
+const allowedOrigins = [
+  "https://inquisitive-monstera-46a1c3.netlify.app",
+  "https://6afee0d780bb7a2721917bba--heartfelt-kitten-f5124c.netlify.app",
+];
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+
 app.use(express.json());
+
 app.use("/api/health", healthRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/users", usersRouter);
