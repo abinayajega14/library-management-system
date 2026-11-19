@@ -14,8 +14,8 @@ import usersRouter from "./routes/users.routes";
 const app = express();
 
 const allowedOrigins = [
+  "https://heartfelt-kitten-f5124c.netlify.app",
   "https://inquisitive-monstera-46a1c3.netlify.app",
-  "https://6afee0d780bb7a2721917bba--heartfelt-kitten-f5124c.netlify.app",
 ];
 
 app.use(
