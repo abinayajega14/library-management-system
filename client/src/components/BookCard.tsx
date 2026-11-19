@@ -1,12 +1,14 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { Book } from "../types/book";
 import BookCover from "./BookCover";
 
 interface BookCardProps {
   book: Book;
+  children?: ReactNode;
 }
 
-export default function BookCard({ book }: BookCardProps) {
+export default function BookCard({ book, children }: BookCardProps) {
   return (
     <Link
       className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
@@ -36,6 +38,7 @@ export default function BookCard({ book }: BookCardProps) {
         <p className="pt-1 text-sm font-medium text-slate-700">
           Available: {book.availableCopies} / {book.totalCopies}
         </p>
+        {children}
       </div>
     </Link>
   );

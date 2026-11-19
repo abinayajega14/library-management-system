@@ -9,8 +9,11 @@ import app from "../src/app";
 import { backfillMembershipExpiries } from "../src/config/db";
 import { BookModel } from "../src/models/book.model";
 import { LoanModel } from "../src/models/loan.model";
+import { RecentViewModel } from "../src/models/recent-view.model";
+import { ReviewModel } from "../src/models/review.model";
 import { UserModel, type UserRole } from "../src/models/user.model";
 import { ensureSeedData } from "../src/scripts/seed";
+import { WaitlistModel } from "../src/models/waitlist.model";
 
 const testSecret = "integration-test-jwt-secret";
 const testPassword = "TestPassword@123";
@@ -94,7 +97,14 @@ before(async () => {
     instance: { dbName: "library_test" },
   });
   await mongoose.connect(mongoServer.getUri(), { dbName: "library_test" });
-  await Promise.all([UserModel.init(), BookModel.init(), LoanModel.init()]);
+  await Promise.all([
+    UserModel.init(),
+    BookModel.init(),
+    LoanModel.init(),
+    RecentViewModel.init(),
+    ReviewModel.init(),
+    WaitlistModel.init(),
+  ]);
 
   httpServer = app.listen(0);
   await once(httpServer, "listening");
@@ -108,10 +118,20 @@ before(async () => {
 beforeEach(async () => {
   await Promise.all([
     LoanModel.deleteMany({}),
+    RecentViewModel.deleteMany({}),
+    ReviewModel.deleteMany({}),
     BookModel.deleteMany({}),
     UserModel.deleteMany({}),
+    WaitlistModel.deleteMany({}),
   ]);
-  await Promise.all([UserModel.init(), BookModel.init(), LoanModel.init()]);
+  await Promise.all([
+    UserModel.init(),
+    BookModel.init(),
+    LoanModel.init(),
+    RecentViewModel.init(),
+    ReviewModel.init(),
+    WaitlistModel.init(),
+  ]);
 });
 
 after(async () => {
@@ -666,6 +686,235 @@ test("demo seeding preserves existing data and is safe to rerun", async () => {
     await LoanModel.countDocuments({ user: member.id, book: book.id }),
     1,
   );
+});
+
+test("book waitlists are FIFO, reserve returned copies, and support leaving", async () => {
+  const [borrower, firstMember, secondMember] = await Promise.all([
+    createUser(),
+    createUser(),
+    createUser(),
+  ]);
+  const [borrowerToken, firstToken, secondToken] = await Promise.all([
+    loginAs(borrower),
+    loginAs(firstMember),
+    loginAs(secondMember),
+  ]);
+  const book = await createBook({ totalCopies: 1 });
+  const initialBorrow = await request("/api/loans", {
+    method: "POST",
+    token: borrowerToken,
+    body: { bookId: book.id },
+  });
+  assert.equal(initialBorrow.status, 201);
+  const initialLoanId = (await initialBorrow.json()).loan.id as string;
+
+  const firstWaitlist = await request(`/api/books/${book.id}/waitlist`, {
+    method: "POST",
+    token: firstToken,
+  });
+  assert.equal(firstWaitlist.status, 201);
+  assert.equal((await firstWaitlist.json()).waitlist.position, 1);
+  const duplicateWaitlist = await request(`/api/books/${book.id}/waitlist`, {
+    method: "POST",
+    token: firstToken,
+  });
+  assert.equal(duplicateWaitlist.status, 200);
+
+  const secondWaitlist = await request(`/api/books/${book.id}/waitlist`, {
+    method: "POST",
+    token: secondToken,
+  });
+  assert.equal(secondWaitlist.status, 201);
+  assert.equal((await secondWaitlist.json()).waitlist.position, 2);
+
+  await request(`/api/loans/${initialLoanId}/return`, {
+    method: "POST",
+    token: borrowerToken,
+  });
+  const outOfTurnBorrow = await request("/api/loans", {
+    method: "POST",
+    token: secondToken,
+    body: { bookId: book.id },
+  });
+  assert.equal(outOfTurnBorrow.status, 409);
+
+  const firstBorrow = await request("/api/loans", {
+    method: "POST",
+    token: firstToken,
+    body: { bookId: book.id },
+  });
+  assert.equal(firstBorrow.status, 201);
+  const firstLoanId = (await firstBorrow.json()).loan.id as string;
+  assert.equal(await WaitlistModel.countDocuments({ book: book.id }), 1);
+
+  await request(`/api/loans/${firstLoanId}/return`, {
+    method: "POST",
+    token: firstToken,
+  });
+  const secondBorrow = await request("/api/loans", {
+    method: "POST",
+    token: secondToken,
+    body: { bookId: book.id },
+  });
+  assert.equal(secondBorrow.status, 201);
+  assert.equal(await WaitlistModel.countDocuments({ book: book.id }), 0);
+});
+
+test("members can edit one rating per book and maintain bounded recent views", async () => {
+  const [member, otherMember] = await Promise.all([createUser(), createUser()]);
+  const [token, otherToken] = await Promise.all([
+    loginAs(member),
+    loginAs(otherMember),
+  ]);
+  const [firstBook, secondBook] = await Promise.all([
+    createBook({ totalCopies: 2 }),
+    createBook({ totalCopies: 1 }),
+  ]);
+
+  const invalidReview = await request(`/api/books/${firstBook.id}/reviews`, {
+    method: "POST",
+    token,
+    body: { rating: 6, comment: "Too many stars" },
+  });
+  assert.equal(invalidReview.status, 400);
+
+  for (const [rating, comment] of [
+    [5, "Enjoyed this book"],
+    [3, "Changed my mind"],
+  ] as const) {
+    const savedReview = await request(`/api/books/${firstBook.id}/reviews`, {
+      method: "POST",
+      token,
+      body: { rating, comment },
+    });
+    assert.equal(savedReview.status, 200);
+  }
+  const secondReview = await request(`/api/books/${firstBook.id}/reviews`, {
+    method: "POST",
+    token: otherToken,
+    body: { rating: 5, comment: "A second opinion" },
+  });
+  assert.equal(secondReview.status, 200);
+
+  const reviews = await request(`/api/books/${firstBook.id}/reviews`, { token });
+  const reviewData = await reviews.json();
+  assert.equal(reviewData.reviewCount, 2);
+  assert.equal(reviewData.averageRating, 4);
+  assert.equal(reviewData.ownReview.rating, 3);
+  assert.equal(
+    await ReviewModel.countDocuments({ book: firstBook.id, user: member.id }),
+    1,
+  );
+
+  await request("/api/users/me/recently-viewed", {
+    method: "POST",
+    token,
+    body: { bookId: firstBook.id },
+  });
+  await request("/api/users/me/recently-viewed", {
+    method: "POST",
+    token,
+    body: { bookId: secondBook.id },
+  });
+  await request("/api/users/me/recently-viewed", {
+    method: "POST",
+    token,
+    body: { bookId: firstBook.id },
+  });
+  const recentViews = await request("/api/users/me/recently-viewed", { token });
+  const recentItems = (await recentViews.json()).items;
+  assert.deepEqual(
+    recentItems.map((item: { book: { id: string } }) => item.book.id),
+    [firstBook.id, secondBook.id],
+  );
+  assert.equal(
+    await RecentViewModel.countDocuments({ user: member.id, book: firstBook.id }),
+    1,
+  );
+
+  const additionalBooks = await Promise.all(
+    Array.from({ length: 9 }, () => createBook({ totalCopies: 1 })),
+  );
+  for (const additionalBook of additionalBooks) {
+    await request("/api/users/me/recently-viewed", {
+      method: "POST",
+      token,
+      body: { bookId: additionalBook.id },
+    });
+  }
+  const boundedViews = await request("/api/users/me/recently-viewed", { token });
+  const boundedItems = (await boundedViews.json()).items;
+  assert.equal(boundedItems.length, 10);
+  assert.equal(
+    await RecentViewModel.countDocuments({ user: member.id }),
+    10,
+  );
+
+  const clearHistory = await request("/api/users/me/recently-viewed", {
+    method: "DELETE",
+    token,
+  });
+  assert.equal(clearHistory.status, 204);
+  assert.equal(await RecentViewModel.countDocuments({ user: member.id }), 0);
+});
+
+test("Gemini recommendations are configured securely and limited to catalog books", async () => {
+  const member = await createUser();
+  const token = await loginAs(member);
+  const book = await createBook({ totalCopies: 1 });
+  const originalApiKey = process.env.GEMINI_API_KEY;
+  const originalFetch = globalThis.fetch;
+  delete process.env.GEMINI_API_KEY;
+
+  const unavailable = await request("/api/recommendations", { token });
+  assert.equal(unavailable.status, 503);
+
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  let capturedApiKey: string | null = null;
+  globalThis.fetch = async (input, init) => {
+    if (String(input).includes("generativelanguage.googleapis.com")) {
+      capturedApiKey = new Headers(init?.headers).get("x-goog-api-key");
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      recommendations: [
+                        { isbn: book.isbn, reason: "Matches the member's interests" },
+                        { isbn: "0000000000", reason: "Not in the library catalog" },
+                      ],
+                    }),
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+
+    return originalFetch(input, init);
+  };
+
+  try {
+    const response = await request("/api/recommendations", { token });
+    assert.equal(response.status, 200);
+    assert.equal(capturedApiKey, "test-gemini-key");
+    const data = await response.json();
+    assert.equal(data.recommendations.length, 1);
+    assert.equal(data.recommendations[0].book.id, book.id);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApiKey === undefined) {
+      delete process.env.GEMINI_API_KEY;
+    } else {
+      process.env.GEMINI_API_KEY = originalApiKey;
+    }
+  }
 });
 
 test("two members competing for the last copy yield one success", async () => {

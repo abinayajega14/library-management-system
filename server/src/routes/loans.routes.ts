@@ -5,6 +5,7 @@ import { authenticate, authorize } from "../middleware/auth.middleware";
 import { BookModel, type Book } from "../models/book.model";
 import { LoanModel, type Loan } from "../models/loan.model";
 import { UserModel } from "../models/user.model";
+import { WaitlistModel } from "../models/waitlist.model";
 import {
   getCurrentLoans,
   getPopulatedBookSummary,
@@ -107,6 +108,19 @@ router.post("/", authenticate, authorize("member", "admin"), async (req, res, ne
       return;
     }
 
+    const firstWaitlistEntry = await WaitlistModel.findOne({ book: book._id })
+      .sort({ createdAt: 1, _id: 1 })
+      .exec();
+    if (
+      firstWaitlistEntry &&
+      firstWaitlistEntry.user.toString() !== req.auth.userId
+    ) {
+      res.status(409).json({
+        message: "This copy is reserved for the next member on the waitlist",
+      });
+      return;
+    }
+
     const activeLoanFilter = {
       user: new Types.ObjectId(req.auth.userId),
       status: "borrowed" as const,
@@ -158,6 +172,10 @@ router.post("/", authenticate, authorize("member", "admin"), async (req, res, ne
       await LoanModel.deleteOne({ _id: loan._id });
       res.status(409).json({ message: "No copies available" });
       return;
+    }
+
+    if (firstWaitlistEntry) {
+      await WaitlistModel.deleteOne({ _id: firstWaitlistEntry._id });
     }
 
     await loan.populate("book", "title author");

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import api from "../api/client";
 import { getApiError, type ApiErrorDetails } from "../api/errors";
 import Alert from "../components/Alert";
+import RecentlyViewedSection from "../components/RecentlyViewedSection";
+import RecommendationsSection from "../components/RecommendationsSection";
 import LoanTable from "../components/LoanTable";
 import Spinner from "../components/Spinner";
 import type { LoanRecord } from "../types/loan";
@@ -64,6 +66,8 @@ export default function MemberDashboardPage() {
             </div>
           </div>
           <div className="space-y-8">
+            <RecommendationsSection />
+            <RecentlyViewedSection />
             <section>
               <h2 className="mb-3 text-xl font-semibold text-slate-900">Current books and due dates</h2>
               <LoanTable loans={dashboard.currentLoans} />

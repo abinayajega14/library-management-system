@@ -9,6 +9,9 @@ the client uses React, TypeScript, Vite, and Tailwind CSS.
 - Member registration, login, profile updates, and password reset
 - Searchable, filterable, paginated book catalog with book details
 - Member borrowing, returns, personal loan history, and dashboards
+- FIFO waitlists for unavailable books
+- Book ratings and member reviews
+- Recently viewed books and Gemini-powered recommendations
 - Admin book management and library dashboard
 - Server-side validation and role-based API access
 
@@ -37,6 +40,10 @@ On macOS or Linux, use `cp server/.env.example server/.env`. Edit
 `server/.env` and set `MONGODB_URI` to your Atlas connection string and
 `JWT_SECRET` to a long, random value. Keep `server/.env` private; it is ignored
 by Git. `PORT` defaults to `5000`, and the client dev server uses port `5173`.
+To enable AI recommendations, set `GEMINI_API_KEY` in `server/.env`. The
+optional `GEMINI_MODEL` defaults to `gemini-2.5-flash`. Recommendation requests
+send book catalog details and the signed-in member's book titles, genres, and
+ratings to the Gemini API; they do not include account details or review text.
 
 Seed demo users, books, and one overdue loan:
 

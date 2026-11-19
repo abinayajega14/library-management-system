@@ -6,6 +6,7 @@ import app from "../src/app";
 import { BookModel } from "../src/models/book.model";
 import { LoanModel } from "../src/models/loan.model";
 import { UserModel } from "../src/models/user.model";
+import { WaitlistModel } from "../src/models/waitlist.model";
 import { getDisplayStatus, getFineAmount } from "../src/utils/loanStatus";
 
 const testSecret = "test-jwt-secret";
@@ -124,6 +125,7 @@ test("loan routes enforce borrowing rules, return copies, and scope reads to the
     loanDeleteOne: LoanModel.deleteOne,
     loanFindOneAndUpdate: LoanModel.findOneAndUpdate,
     loanFind: LoanModel.find,
+    waitlistFindOne: WaitlistModel.findOne,
   };
   process.env.JWT_SECRET = testSecret;
 
@@ -309,6 +311,18 @@ test("loan routes enforce borrowing rules, return copies, and scope reads to the
     },
   });
 
+  let waitlistQuery: {
+    sort: () => typeof waitlistQuery;
+    exec: () => Promise<null>;
+  };
+  waitlistQuery = {
+    sort: () => waitlistQuery,
+    exec: async () => null,
+  };
+  Object.assign(WaitlistModel, {
+    findOne: () => waitlistQuery,
+  });
+
   try {
     const server = app.listen(0);
     try {
@@ -486,6 +500,7 @@ test("loan routes enforce borrowing rules, return copies, and scope reads to the
       deleteOne: originals.loanDeleteOne,
       findOneAndUpdate: originals.loanFindOneAndUpdate,
       find: originals.loanFind,
+      findOne: originals.waitlistFindOne,
     });
     if (originalSecret === undefined) {
       delete process.env.JWT_SECRET;

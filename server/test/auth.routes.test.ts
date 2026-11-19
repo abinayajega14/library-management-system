@@ -419,6 +419,7 @@ test("forgot and reset password use a hashed, expiring, single-use token", async
   const user = { id: "member-id" };
   const loggedMessages: string[] = [];
   let passwordUpdateCount = 0;
+  const updateOptions: Array<Record<string, unknown> | undefined> = [];
   Object.assign(console, {
     log: (message: string) => loggedMessages.push(message),
   });
@@ -429,7 +430,9 @@ test("forgot and reset password use a hashed, expiring, single-use token", async
         $set?: Record<string, unknown>;
         $unset?: Record<string, unknown>;
       },
+      options?: Record<string, unknown>,
     ) => {
+      updateOptions.push(options);
       if ("email" in filter) {
         if (filter.email !== "ada@example.com") {
           return null;
@@ -498,6 +501,7 @@ test("forgot and reset password use a hashed, expiring, single-use token", async
         message.includes(`http://localhost:5173/reset-password?token=${resetToken}`),
       ),
     );
+    assert.deepEqual(updateOptions[0], { returnDocument: "before" });
 
     const unknownEmail = await postJson("forgot-password", {
       email: "unknown@example.com",
@@ -521,6 +525,7 @@ test("forgot and reset password use a hashed, expiring, single-use token", async
     });
     assert.equal(reset.status, 200);
     assert.equal((await reset.json()).message, "Password has been reset");
+    assert.deepEqual(updateOptions[1], { returnDocument: "before" });
     assert.ok(storedPasswordHash);
     assert.equal(
       await bcrypt.compare("new secure password", storedPasswordHash),

@@ -158,7 +158,7 @@ router.post("/forgot-password", async (req, res, next) => {
     const user = await UserModel.findOneAndUpdate(
       { email: parsed.data.email },
       { $set: { resetTokenHash, resetTokenExpires } },
-      { new: false },
+      { returnDocument: "before" },
     );
 
     const response: { message: string; resetToken?: string } = {
@@ -204,7 +204,7 @@ router.post("/reset-password", async (req, res, next) => {
         $set: { passwordHash },
         $unset: { resetTokenHash: 1, resetTokenExpires: 1 },
       },
-      { new: false },
+      { returnDocument: "before" },
     );
 
     if (!user) {

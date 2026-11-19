@@ -4,9 +4,11 @@ import api from "../api/client";
 import { getApiError, type ApiErrorDetails } from "../api/errors";
 import Alert from "../components/Alert";
 import BookCover from "../components/BookCover";
+import BookReviewsSection from "../components/BookReviewsSection";
 import Spinner from "../components/Spinner";
 import { useAuth } from "../context/useAuth";
 import type { Book } from "../types/book";
+import type { WaitlistState } from "../types/engagement";
 
 interface BookResponse {
   book: Book;
@@ -36,10 +38,41 @@ export default function BookDetailsPage() {
   } | null>(null);
   const [borrowError, setBorrowError] = useState<ApiErrorDetails | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [waitlistResult, setWaitlistResult] = useState<{
+    id: string;
+    value: WaitlistState;
+  } | null>(null);
+  const [waitlistErrorResult, setWaitlistErrorResult] = useState<{
+    id: string;
+    details: ApiErrorDetails;
+  } | null>(null);
+  const [waitlistMessageResult, setWaitlistMessageResult] = useState<{
+    id: string;
+    message: string;
+  } | null>(null);
+  const [waitlistBusy, setWaitlistBusy] = useState(false);
+  const [activityErrorResult, setActivityErrorResult] = useState<{
+    id: string;
+    details: ApiErrorDetails;
+  } | null>(null);
 
   const book = bookResult && bookResult.id === id ? bookResult.book : null;
   const pageError = bookError && bookError.id === id ? bookError.details : null;
   const bookLoading = Boolean(id) && !book && !pageError;
+  const waitlist =
+    waitlistResult && waitlistResult.id === id ? waitlistResult.value : null;
+  const waitlistError =
+    waitlistErrorResult && waitlistErrorResult.id === id
+      ? waitlistErrorResult.details
+      : null;
+  const waitlistMessage =
+    waitlistMessageResult && waitlistMessageResult.id === id
+      ? waitlistMessageResult.message
+      : null;
+  const activityError =
+    activityErrorResult && activityErrorResult.id === id
+      ? activityErrorResult.details
+      : null;
 
   const loadBook = useCallback(
     async () => {
@@ -55,6 +88,40 @@ export default function BookDetailsPage() {
     },
     [id],
   );
+
+  useEffect(() => {
+    if (!id) return;
+    const controller = new AbortController();
+    api
+      .get<{ waitlist: WaitlistState }>(`/books/${id}/waitlist`, {
+        signal: controller.signal,
+      })
+      .then(({ data }) => {
+        if (!controller.signal.aborted) {
+          setWaitlistResult({ id, value: data.waitlist });
+          setWaitlistErrorResult(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setWaitlistErrorResult({ id, details: getApiError(error) });
+        }
+      });
+    return () => controller.abort();
+  }, [id]);
+
+  const refreshWaitlist = useCallback(async () => {
+    if (!id) return;
+    try {
+      const { data } = await api.get<{ waitlist: WaitlistState }>(
+        `/books/${id}/waitlist`,
+      );
+      setWaitlistResult({ id, value: data.waitlist });
+      setWaitlistErrorResult(null);
+    } catch (error) {
+      setWaitlistErrorResult({ id, details: getApiError(error) });
+    }
+  }, [id]);
 
   const refreshBook = useCallback(async () => {
     setRefreshing(true);
@@ -74,6 +141,16 @@ export default function BookDetailsPage() {
           if (!controller.signal.aborted) {
             setBookResult({ id, book: data.book });
             setBookError(null);
+            api
+              .post("/users/me/recently-viewed", { bookId: id }, {
+                signal: controller.signal,
+              })
+              .then(() => setActivityErrorResult(null))
+              .catch((error: unknown) => {
+                if (!controller.signal.aborted) {
+                  setActivityErrorResult({ id, details: getApiError(error) });
+                }
+              });
           }
         })
         .catch((error: unknown) => {
@@ -95,11 +172,44 @@ export default function BookDetailsPage() {
       const { data } = await api.post<BorrowResponse>("/loans", { bookId: book.id });
       setSuccess(`Book borrowed. Due date: ${formatDueDate(data.loan.dueDate)}.`);
       await refreshBook();
+      await refreshWaitlist();
     } catch (error) {
       setBorrowError(getApiError(error));
       await refreshBook();
     } finally {
       setBorrowing(false);
+    }
+  }
+
+  async function handleWaitlist() {
+    if (!book || waitlistBusy) return;
+    setWaitlistBusy(true);
+    setWaitlistErrorResult(null);
+    setWaitlistMessageResult(null);
+
+    try {
+      if (waitlist?.position) {
+        const { data } = await api.delete<{ message: string; waitlist: WaitlistState }>(
+          `/books/${book.id}/waitlist`,
+        );
+        setWaitlistResult({ id: book.id, value: data.waitlist });
+        setWaitlistMessageResult({ id: book.id, message: data.message });
+      } else {
+        const { data } = await api.post<{
+          message: string;
+          waitlist: WaitlistState;
+        }>(`/books/${book.id}/waitlist`);
+        setWaitlistResult({ id: book.id, value: data.waitlist });
+        setWaitlistMessageResult({
+          id: book.id,
+          message: `${data.message}. Your position is ${data.waitlist.position}.`,
+        });
+      }
+    } catch (error) {
+      setWaitlistErrorResult({ id: book.id, details: getApiError(error) });
+      await refreshWaitlist();
+    } finally {
+      setWaitlistBusy(false);
     }
   }
 
@@ -142,6 +252,29 @@ export default function BookDetailsPage() {
           <Alert message={success} variant="success" />
         </div>
       )}
+      {activityError && (
+        <div className="mb-5">
+          <Alert
+            variant="error"
+            message={`Unable to update recently viewed books: ${activityError.message}`}
+            errors={activityError.errors}
+          />
+        </div>
+      )}
+      {waitlistError && (
+        <div className="mb-5">
+          <Alert
+            variant="error"
+            message={waitlistError.message}
+            errors={waitlistError.errors}
+          />
+        </div>
+      )}
+      {waitlistMessage && (
+        <div className="mb-5">
+          <Alert message={waitlistMessage} variant="success" />
+        </div>
+      )}
       <div className="grid gap-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <div className="overflow-hidden rounded-xl bg-slate-100">
           <BookCover
@@ -176,7 +309,11 @@ export default function BookDetailsPage() {
             <div className="flex flex-wrap gap-3">
               <button
                 className="inline-flex min-w-36 items-center justify-center gap-2 rounded-lg bg-emerald-800 px-5 py-2.5 font-semibold text-white hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={book.availableCopies === 0 || borrowing}
+                disabled={
+                  book.availableCopies === 0 ||
+                  borrowing ||
+                  (waitlist !== null && !waitlist.canBorrow)
+                }
                 onClick={handleBorrow}
                 type="button"
               >
@@ -187,8 +324,26 @@ export default function BookDetailsPage() {
                   ? "Borrowing…"
                   : book.availableCopies === 0
                     ? "Unavailable"
-                    : "Borrow"}
+                    : waitlist?.position === 1
+                      ? "Borrow reserved copy"
+                      : waitlist && !waitlist.canBorrow
+                        ? "Reserved for waitlist"
+                        : "Borrow"}
               </button>
+              {(book.availableCopies === 0 || Boolean(waitlist?.position)) && (
+                <button
+                  className="inline-flex rounded-lg border border-emerald-800 px-5 py-2.5 font-semibold text-emerald-900 hover:bg-emerald-50 disabled:opacity-60"
+                  disabled={waitlistBusy}
+                  onClick={handleWaitlist}
+                  type="button"
+                >
+                  {waitlistBusy
+                    ? "Updating…"
+                    : waitlist?.position
+                      ? "Leave waitlist"
+                      : "Join waitlist"}
+                </button>
+              )}
               {user?.role === "admin" && (
                 <Link
                   className="inline-flex rounded-lg border border-emerald-800 px-5 py-2.5 font-semibold text-emerald-900 hover:bg-emerald-50"
@@ -198,9 +353,22 @@ export default function BookDetailsPage() {
                 </Link>
               )}
             </div>
+            {waitlist && waitlist.waiting > 0 && (
+              <p className="mt-3 text-sm text-slate-600">
+                {waitlist.waiting} {waitlist.waiting === 1 ? "member is" : "members are"}{" "}
+                on the waitlist
+                {waitlist.position
+                  ? `; your position is ${waitlist.position}.`
+                  : "."}
+                {waitlist.position === 1 && book.availableCopies > 0
+                  ? " A copy is ready for you."
+                  : ""}
+              </p>
+            )}
           </div>
         </div>
       </div>
+      <BookReviewsSection bookId={book.id} key={book.id} />
     </section>
   );
 }
